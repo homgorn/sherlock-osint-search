@@ -142,3 +142,53 @@ Original Creator - [Siddharth Dushantha](https://github.com/sdushantha)
 
 [ext_pypi]: https://pypi.org/project/sherlock-project/
 [ext_brew]: https://formulae.brew.sh/formula/sherlock
+
+## Telegram Бот для OSINT поиска с использованием Sherlock
+
+Этот проект представляет собой Telegram-бота, который использует мощь Sherlock для поиска информации о пользователях (OSINT) на различных социальных сетях и других онлайн-платформах.
+
+### Установка
+
+1.  **Клонируйте репозиторий (если вы этого еще не сделали):**
+    ```bash
+    git clone https://github.com/sherlock-project/sherlock.git
+    cd sherlock
+    ```
+
+2.  **Создайте и активируйте виртуальное окружение (рекомендуется):**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # для Linux/macOS
+    # venv\Scripts\activate    # для Windows
+    ```
+
+3.  **Установите зависимости:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+    Это установит `python-telegram-bot` и `sherlock-project`.
+
+### Настройка и запуск
+
+1.  **Получите токен для Telegram бота:**
+    *   Откройте Telegram и найдите бота @BotFather.
+    *   Отправьте ему команду `/newbot`.
+    *   Следуйте инструкциям, чтобы создать нового бота. Вы получите токен доступа.
+
+2.  **Настройте токен в коде:**
+    *   Откройте файл `telegram_bot.py`.
+    *   Найдите строку `TOKEN = "YOUR_TOKEN"` и замените `"YOUR_TOKEN"` на токен, полученный от @BotFather.
+
+3.  **Запустите бота:**
+    ```bash
+    python telegram_bot.py
+    ```
+
+4.  **Начните использовать бота в Telegram:**
+    *   Найдите своего бота в Telegram по имени, которое вы ему дали.
+    *   Отправьте команду `/start`, чтобы увидеть приветственное сообщение.
+    *   Отправьте имя пользователя (например, `johndoe`), чтобы начать поиск.
+
+### Как это работает
+
+Бот принимает имя пользователя от вас в чате Telegram. Затем он использует библиотеку Sherlock для поиска этого имени пользователя на сотнях сайтов. Найденные ссылки на профили отправляются вам обратно в чат.
