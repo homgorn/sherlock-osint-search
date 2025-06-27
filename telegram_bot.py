@@ -1,6 +1,13 @@
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    ConversationHandler,
+)
 from sherlock_project import sherlock
 from sherlock_project.sites import SitesInformation
 from sherlock_project.notify import QueryNotifyPrint
@@ -15,30 +22,82 @@ logger = logging.getLogger(__name__)
 # Замените 'YOUR_TOKEN' на ваш реальный токен бота
 TOKEN = "8071003552:AAEQNGYKNPNU9mwYNnCdyAl9mOfxBuyqRmE"
 
+# Определяем состояния для ConversationHandler
+TYPING_USERNAME, CHOOSING_ACTION = range(2)
+
+# Кнопки
+KEYBOARD_INPUT_NAME = "Ввести имя"
+KEYBOARD_DESCRIPTION = "Краткое описание"
+KEYBOARD_DEVELOPER = "О разработчике"
+
+reply_keyboard = [
+    [KeyboardButton(KEYBOARD_INPUT_NAME)],
+    [KeyboardButton(KEYBOARD_DESCRIPTION), KeyboardButton(KEYBOARD_DEVELOPER)],
+]
+markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False, resize_keyboard=True)
+
 # Определите обработчики команд.
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет приветственное сообщение при команде /start."""
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отправляет приветственное сообщение при команде /start и показывает клавиатуру."""
     await update.message.reply_text(
         "Привет! Я бот для поиска информации о пользователях (OSINT). "
-        "Отправь мне имя пользователя, и я постараюсь найти его на различных сайтах."
+        "Выбери действие на клавиатуре или отправь мне имя пользователя для поиска.",
+        reply_markup=markup,
     )
+    return CHOOSING_ACTION
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет справочное сообщение при команде /help."""
     await update.message.reply_text(
-        "Чтобы начать поиск, просто отправь мне имя пользователя.\n"
-        "Например: `john_doe`\n\n"
-        "Я использую Sherlock для поиска на более чем 400 сайтах."
+        "Чтобы начать поиск, нажми кнопку 'Ввести имя' и отправь мне имя пользователя, "
+        "или просто отправь имя пользователя.\n"
+        "Используй кнопки для получения информации о боте или разработчике.\n\n"
+        "Я использую Sherlock для поиска на более чем 400 сайтах.",
+        reply_markup=markup,
     )
 
-async def search_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Ищет имя пользователя с помощью Sherlock."""
+async def request_username_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Запрашивает у пользователя ввод имени."""
+    await update.message.reply_text("Пожалуйста, введите имя пользователя для поиска:")
+    return TYPING_USERNAME
+
+async def show_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отправляет краткое описание бота."""
+    await update.message.reply_text(
+        "Этот бот предназначен для поиска общедоступной информации о пользователях "
+        "в различных социальных сетях и на других онлайн-платформах. "
+        "Он использует движок Sherlock. Результаты поиска могут помочь в OSINT-расследованиях."
+    )
+    return CHOOSING_ACTION
+
+async def show_developer_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отправляет информацию о разработчике."""
+    await update.message.reply_text(
+        "Этот бот создан с использованием библиотеки Sherlock (https://github.com/sherlock-project/sherlock) "
+        "и `python-telegram-bot`. Разработчик этого интерфейса - AI ассистент Jules."
+    )
+    return CHOOSING_ACTION
+
+async def search_username_direct(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обрабатывает прямое сообщение с именем пользователя (не через кнопку)."""
     username = update.message.text
+    await _perform_search(update, context, username)
+    return CHOOSING_ACTION
+
+
+async def search_username_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ищет имя пользователя, введенное после нажатия кнопки 'Ввести имя'."""
+    username = update.message.text
+    await _perform_search(update, context, username)
+    return CHOOSING_ACTION # Возвращаемся к выбору действий
+
+async def _perform_search(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str):
+    """Общая функция для выполнения поиска Sherlock."""
     if not username:
-        await update.message.reply_text("Пожалуйста, введите имя пользователя.")
+        await update.message.reply_text("Пожалуйста, введите имя пользователя.", reply_markup=markup)
         return
 
-    await update.message.reply_text(f"Начинаю поиск по имени пользователя: {username}...")
+    await update.message.reply_text(f"Начинаю поиск по имени пользователя: {username}...", reply_markup=markup)
 
     # Создаем кастомный QueryNotify для сбора результатов
     class TelegramQueryNotify(QueryNotifyPrint):
@@ -94,19 +153,35 @@ async def search_username(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error(f"Ошибка при поиске пользователя {username}: {e}", exc_info=True)
         # Отправляем более подробное сообщение об ошибке, если это безопасно
         # В продакшене лучше логировать детали и давать пользователю общее сообщение
-        await update.message.reply_text(f"Произошла ошибка при поиске. Подробности в логах сервера.")
+        await update.message.reply_text(f"Произошла ошибка при поиске. Подробности в логах сервера.", reply_markup=markup)
 
 def main() -> None:
     """Запускает бота."""
     # Создаем Application и передаем ему токен вашего бота.
     application = Application.builder().token(TOKEN).build()
 
-    # Регистрируем обработчики команд
-    application.add_handler(CommandHandler("start", start))
+    # Создаем ConversationHandler
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            CHOOSING_ACTION: [
+                MessageHandler(filters.Regex(f"^{KEYBOARD_INPUT_NAME}$"), request_username_input),
+                MessageHandler(filters.Regex(f"^{KEYBOARD_DESCRIPTION}$"), show_description),
+                MessageHandler(filters.Regex(f"^{KEYBOARD_DEVELOPER}$"), show_developer_info),
+                # Обработчик для прямого ввода имени пользователя без нажатия кнопки
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_username_direct),
+            ],
+            TYPING_USERNAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_username_conversation)
+            ],
+        },
+        fallbacks=[CommandHandler("start", start), CommandHandler("help", help_command)],
+    )
+
+    application.add_handler(conv_handler)
+    # Добавляем CommandHandler для /help отдельно, чтобы он работал всегда
     application.add_handler(CommandHandler("help", help_command))
 
-    # Регистрируем обработчик сообщений для поиска имени пользователя
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_username))
 
     # Запускаем бота до тех пор, пока пользователь не нажмет Ctrl-C
     logger.info("Бот запускается...")
